@@ -754,24 +754,23 @@ define(['require', 'lodash', 'jquery', 'jsPlumb', 'dagre', 'alerts'], function (
      * @param {Array} property name hierarchy of the property
      * @returns {Array} List of connections
      */
-    TypeMapperRenderer.prototype.getSourceConnectionsByProperty = function(structName, property) {
+    TypeMapperRenderer.prototype.getSourceConnectionsByProperty = function(structName, property, type) {
         var self = this;
         var connections = [];
-
-        struct.name + this.viewIdSeperator + this.viewId;
-        _.forEach(property, function (propertyName) {
+        for (var i = 0; i < property.length; i++) {
             _.forEach(self.jsPlumbInstance.getAllConnections(), function (connection) {
-                    if (connection.sourceId.includes(structName + self.viewIdSeperator + self.viewId
-                                                        + self.idNameSeperator + propertyName)) {
-                        connections.push(self.getConnectionObject(connection.getParameter("id"),
-                                                        connection.sourceId, connection.targetId));
-                    }
+                if (connection.sourceId.includes(structName + self.viewIdSeperator + self.viewId
+                    + self.idNameSeperator + property[i] + this.nameTypeSeperator + type[i])) {
+                    connections.push(self.getConnectionObject(connection.getParameter("id"),
+                        connection.sourceId, connection.targetId));
+                }
             });
+        }
 
-            _.forEach(connections, function (connection) {
-                self.jsPlumbInstance.detach(connection);
-            });
+        _.forEach(connections, function (connection) {
+            self.jsPlumbInstance.detach(connection);
         });
+
         return connections;
     };
 
@@ -781,22 +780,23 @@ define(['require', 'lodash', 'jquery', 'jsPlumb', 'dagre', 'alerts'], function (
      * @param {Array} property name hierarchy of the property
      * @returns {Array} List of connections
      */
-    TypeMapperRenderer.prototype.getTargetConnectionsByProperty = function(structName, property) {
+    TypeMapperRenderer.prototype.getTargetConnectionsByProperty = function(structName, property, type) {
         var self = this;
         var connections = [];
-        _.forEach(property, function (propertyName) {
+        for (var i = 0; i < property.length; i++) {
             _.forEach(self.jsPlumbInstance.getAllConnections(), function (connection) {
                 if (connection.targetId.includes(structName + self.viewIdSeperator + self.viewId
-                                                    + self.idNameSeperator + propertyName)) {
+                    + self.idNameSeperator + property[i] + this.nameTypeSeperator + type[i])) {
                     connections.push(self.getConnectionObject(connection.getParameter("id"),
                         connection.sourceId, connection.targetId));
                 }
             });
+        }
 
-            _.forEach(connections, function (connection) {
-                    self.jsPlumbInstance.detach(connection);
-            });
+        _.forEach(connections, function (connection) {
+            self.jsPlumbInstance.detach(connection);
         });
+
         return connections;
     };
 
