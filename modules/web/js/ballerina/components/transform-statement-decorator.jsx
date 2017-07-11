@@ -314,13 +314,20 @@ class TransformStatementDecorator extends React.Component {
                 // Connection source is not a struct and target is a struct.
                 // Source could be a function node.
                 let assignmentStmtSource = self.findEnclosingAssignmentStatement(connection.targetReference.id);
-                assignmentStmtSource.getChildren()[1].getChildren()[0].addChild(sourceExpression);
+                var index = _.findIndex(self.getFunctionDefinition(
+                                                    connection.targetReference.children[1].children[0]).getParameters(),
+                                                    (param) => { return param.name == connection.targetProperty[0]});
+                assignmentStmtSource.getChildren()[1].getChildren()[0].addChild(sourceExpression, index);
                 return assignmentStmtSource.id;
             } else if (_.isUndefined(sourceStruct) && !_.isUndefined(targetStruct)) {
                 // Connection target is not a struct and source is a struct.
                 // Target is a function node.
                 let assignmentStmtTarget = self.findEnclosingAssignmentStatement(connection.sourceReference.id);
-                assignmentStmtTarget.getChildren()[0].addChild(targetExpression);
+                var index = _.findIndex(self.getFunctionDefinition(
+                                                connection.sourceReference.children[1].children[0]).getReturnParams(),
+                                                                (param) => {
+                                                                    return param.name == connection.sourceProperty[0]});
+                assignmentStmtTarget.getChildren()[0].addChild(targetExpression, index);
                 return assignmentStmtTarget.id;
             } else {
                 // Connection source and target are not structs
