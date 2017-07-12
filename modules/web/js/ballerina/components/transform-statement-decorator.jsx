@@ -314,16 +314,22 @@ class TransformStatementDecorator extends React.Component {
                 // Connection source is not a struct and target is a struct.
                 // Source could be a function node.
                 let assignmentStmtSource = self.findEnclosingAssignmentStatement(connection.targetReference.id);
-                var index = _.findIndex(self.getFunctionDefinition(
-                                                    connection.targetReference.children[1].children[0]).getParameters(),
+                let funcNode;
+                if (BallerinaASTFactory.isFunctionInvocationExpression(connection.targetReference)) {
+                    funcNode = connection.targetReference;
+                } else {
+                    funcNode = connection.targetReference.children[1].children[0];
+                }
+                let index = _.findIndex(self.getFunctionDefinition(funcNode).getParameters(),
                                                     (param) => { return param.name == connection.targetProperty[0]});
-                assignmentStmtSource.getChildren()[1].getChildren()[0].addChild(sourceExpression, index);
+                funcNode.removeChild(funcNode.children[index], true);
+                funcNode.addChild(sourceExpression, index);
                 return assignmentStmtSource.id;
             } else if (_.isUndefined(sourceStruct) && !_.isUndefined(targetStruct)) {
                 // Connection target is not a struct and source is a struct.
                 // Target is a function node.
                 let assignmentStmtTarget = self.findEnclosingAssignmentStatement(connection.sourceReference.id);
-                var index = _.findIndex(self.getFunctionDefinition(
+                let index = _.findIndex(self.getFunctionDefinition(
                                                 connection.sourceReference.children[1].children[0]).getReturnParams(),
                                                                 (param) => {
                                                                     return param.name == connection.sourceProperty[0]});
@@ -380,10 +386,14 @@ class TransformStatementDecorator extends React.Component {
 
                 // get the function invocation expression for nested and single cases.
                 const funcInvocationExpression = self.findFunctionInvocationById(assignmentStmtSource.getRightExpression(), connection.targetReference.id);
-                let expression = _.find(funcInvocationExpression.getChildren(), (child) => {
+                let param = _.find(funcInvocationExpression.getChildren(), (child) => {
                     return (child.getExpressionString().trim() === targetExpression.getExpressionString().trim());
                 });
-                funcInvocationExpression.removeChild(expression);
+                const parent = param.getParent();
+                const index = parent.getIndexOfChild(param);
+                parent.removeChild(param, true);
+                parent.addChild(BallerinaASTFactory.createNullLiteralExpression(), index);
+                console.log(funcInvocationExpression);
             } else if (_.isUndefined(sourceStruct) && !_.isUndefined(targetStruct)) {
                 // Connection target is not a struct and source is a struct.
                 // Target could be a function node.
@@ -429,9 +439,6 @@ class TransformStatementDecorator extends React.Component {
                     return;
                 }
                 this.mapper.addFunction(func, node, node.getParent().removeChild.bind(node.getParent()));
-
-                // remove function invocation parameters
-                _.remove(functionInvocationExpression.getChildren());
             }
         });
 

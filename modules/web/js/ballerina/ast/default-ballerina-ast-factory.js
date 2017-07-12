@@ -278,6 +278,7 @@ DefaultBallerinaASTFactory.createAssignmentFunctionInvocationStatement = functio
                     functionInvokeString += ', ';
                 }
                 functionInvokeString += param.name;
+                funcInvocationExpression.addChild(BallerinaASTFactory.createNullLiteralExpression());
             });
         }
         functionInvokeString += ')';
