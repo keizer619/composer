@@ -21,7 +21,6 @@ import PropTypes from 'prop-types';
 import _ from 'lodash';
 import $ from 'jquery';
 import alerts from 'alerts';
-import { Scrollbars } from 'react-custom-scrollbars';
 import log from 'log';
 import TransformRender from './transform-render';
 import TransformNodeManager from './transform-node-manager';
@@ -30,6 +29,7 @@ import ASTNode from '../../../../../ast/node';
 import DragDropManager from '../../../../../tool-palette/drag-drop-manager';
 import Tree from './tree';
 import FunctionInv from './function';
+import Operator from './operator';
 import { getLangServerClientInstance } from './../../../../../../langserver/lang-server-client-controller';
 import { getResolvedTypeData } from './../../../../../../langserver/lang-server-utils';
 import ASTFactory from '../../../../../ast/ast-factory';
@@ -58,7 +58,6 @@ class TransformExpanded extends React.Component {
             selectedSource: '-1',
             selectedTarget: '-1',
             foldedEndpoints: {},
-            foldedFunctions: {},
         };
         this.sourceElements = {};
         this.targetElements = {};
@@ -82,13 +81,8 @@ class TransformExpanded extends React.Component {
         this.removeSourceType = this.removeSourceType.bind(this);
         this.removeTargetType = this.removeTargetType.bind(this);
         this.foldEndpoint = this.foldEndpoint.bind(this);
-        this.foldFunction = this.foldFunction.bind(this);
         this.removeEndpoint = this.removeEndpoint.bind(this);
         this.updateVariable = this.updateVariable.bind(this);
-        this.onDragLeave = this.onDragLeave.bind(this);
-        this.onDragEnter = this.onDragEnter.bind(this);
-        this.onConnectionsScroll = this.onConnectionsScroll.bind(this);
-        this.onConnectPointMouseEnter = this.onConnectPointMouseEnter.bind(this);
     }
 
     foldEndpoint(key) {
@@ -96,15 +90,6 @@ class TransformExpanded extends React.Component {
             {
                 foldedEndpoints: _.extend(this.state.foldedEndpoints, {
                     [key]: !this.state.foldedEndpoints[key],
-                }),
-            });
-    }
-
-    foldFunction(key) {
-        this.setState(
-            {
-                foldedFunctions: _.extend(this.state.foldedFunctions, {
-                    [key]: !this.state.foldedFunctions[key],
                 }),
             });
     }
@@ -119,17 +104,6 @@ class TransformExpanded extends React.Component {
 
     onDisconnectionCallback(connection) {
         this.transformNodeManager.removeStatementEdge(connection);
-    }
-
-    onConnectionsScroll() {
-        this.mapper.repaintDraggingArrows();
-    }
-
-    onConnectPointMouseEnter(endpoint) {
-        if (!this.mapper.isConnectionDragging()) {
-            return;
-        }
-        this.mapper.setDroppingTarget(endpoint);
     }
 
     recordSourceElement(element, id, input) {
@@ -187,6 +161,21 @@ class TransformExpanded extends React.Component {
         if (ASTFactory.isFunctionInvocationExpression(rightExpression)) {
             this.drawFunctionInvocationExpression(leftExpression, rightExpression, statement);
         }
+
+        if (ASTFactory.isBinaryExpression(rightExpression)
+                    || ASTFactory.isUnaryExpression(rightExpression)) {
+            const targetId = leftExpression.getExpressionString().trim() + ':' + viewId;
+            if (ASTFactory.isBinaryExpression(rightExpression)) {
+                const leftId = rightExpression.getLeftExpression().getExpressionString().trim() + ':' + viewId;
+                this.drawConnection(leftId, rightExpression.getID() + ':0:' + viewId);
+                const rightId = rightExpression.getRightExpression().getExpressionString().trim() + ':' + viewId;
+                this.drawConnection(rightId, rightExpression.getID() + ':1:' + viewId);
+            } else {
+                const leftId = rightExpression.children[0].getExpressionString().trim() + ':' + viewId;
+                this.drawConnection(leftId, rightExpression.getID() + ':0:' + viewId);
+            }
+            this.drawConnection(rightExpression.getID() + ':return:0:' + viewId, targetId);
+        }
     }
 
     getFoldedEndpointId(exprString, viewId, type = 'source') {
@@ -233,13 +222,7 @@ class TransformExpanded extends React.Component {
                     sourceId = this.getFoldedEndpointId(expression.getExpressionString().trim(), viewId, 'source');
                 }
 
-                let targetId = `${functionInvID}:${i}:${viewId}`;
-                if (!this.targetElements[targetId]) {
-                    // function is folded
-                    folded = true;
-                    targetId = `${functionInvID}:${viewId}`;
-                }
-
+                const targetId = `${functionInvID}:${i}:${viewId}`;
                 this.drawConnection(sourceId, targetId, folded);
             }
         });
@@ -248,24 +231,11 @@ class TransformExpanded extends React.Component {
             return;
         }
 
-        let folded = false;
-
-        let sourceId = `${functionInvID}:0:return:${viewId}`;
-        if (!this.sourceElements[sourceId]) {
-            // function is folded
-            folded = true;
-            sourceId = `${functionInvID}:${viewId}`;
-        }
-
+        const sourceId = `${functionInvID}:0:return:${viewId}`;
         const parentFuncInvID = parentFunctionInvocationExpression.getID();
-        let targetId = `${parentFuncInvID}:${parentParameterIndex}:${viewId}`;
-        if (!this.targetElements[targetId]) {
-            // function is folded
-            folded = true;
-            targetId = `${parentFuncInvID}:${viewId}`;
-        }
+        const targetId = `${parentFuncInvID}:${parentParameterIndex}:${viewId}`;
 
-        this.drawConnection(sourceId, targetId, folded);
+        this.drawConnection(sourceId, targetId);
         this.mapper.reposition(this.props.model.getID());
     }
 
@@ -312,14 +282,7 @@ class TransformExpanded extends React.Component {
                         sourceId = this.getFoldedEndpointId(expression.getExpressionString().trim(), viewId, 'source');
                     }
 
-                    let targetId = `${funcInvID}:${i}:${viewId}`;
-
-                    if (!this.targetElements[targetId]) {
-                        // function is folded
-                        folded = true;
-                        targetId = `${funcInvID}:${viewId}`;
-                    }
-
+                    const targetId = `${funcInvID}:${i}:${viewId}`;
                     this.drawConnection(sourceId, targetId, folded);
                 }
             }
@@ -332,17 +295,10 @@ class TransformExpanded extends React.Component {
             if (!returnParams[i]) {
                 return;
             }
-            let folded = false;
 
-            let sourceId = `${funcInvID}:${i}:return:${viewId}`;
-            if (!this.sourceElements[sourceId]) {
-                // function is folded
-                folded = true;
-                sourceId = `${funcInvID}:${viewId}`;
-            }
-
-
+            const sourceId = `${funcInvID}:${i}:return:${viewId}`;
             let targetId = `${expression.getExpressionString().trim()}:${viewId}`;
+            let folded = false;
             if (!this.targetElements[targetId]) {
                 folded = true;
                 targetId = this.getFoldedEndpointId(expression.getExpressionString().trim(), viewId, 'target');
@@ -392,6 +348,11 @@ class TransformExpanded extends React.Component {
     }
 
     drawConnection(sourceId, targetId, folded) {
+        // if source or target is not mounted then this draw request is ignored
+        if (!this.sourceElements[sourceId] || !this.targetElements[targetId]) {
+            return;
+        }
+
         this.mapper.addConnection(sourceId, targetId, folded);
     }
 
@@ -425,63 +386,35 @@ class TransformExpanded extends React.Component {
 
     componentDidUpdate(prevProps, prevState) {
         this.transformNodeManager.setTransformStmt(this.props.model);
-
-        this.mapper.disconnectAll();
-
-        let sourceKeys = Object.keys(this.sourceElements);
+        const sourceKeys = Object.keys(this.sourceElements);
         sourceKeys.forEach((key) => {
             const { element, input } = this.sourceElements[key];
-            if (!element) {
+            if (element) {
+                this.mapper.addSource(element, input);
+            } else {
                 delete this.sourceElements[key];
             }
         });
 
-        let targetKeys = Object.keys(this.targetElements);
+        const targetKeys = Object.keys(this.targetElements);
         targetKeys.forEach((key) => {
             const { element, output } = this.targetElements[key];
-            if (!element) {
+            if (element) {
+                this.mapper.addTarget(element, output);
+            } else {
                 delete this.targetElements[key];
             }
         });
 
-        sourceKeys = Object.keys(this.sourceElements);
-        targetKeys = Object.keys(this.targetElements);
-
-        sourceKeys.forEach((key) => {
-            const { element, input } = this.sourceElements[key];
-            this.mapper.addSource(element, input, false);
-        });
-
-        targetKeys.forEach((key) => {
-            const { element, output } = this.targetElements[key];
-            this.mapper.addTarget(element, output, false,
-                    this.transformNodeManager.isConnectionValid.bind(this.transformNodeManager));
-        });
+        this.mapper.disconnectAll();
 
         _.forEach(this.props.model.getChildren(), (statement) => {
             this.createConnection(statement);
         });
-
-        this.mapper.connectionsAdded();
-
-        sourceKeys.forEach((key) => {
-            const { element, input } = this.sourceElements[key];
-            this.mapper.addSource(element, input, true);
-        });
-
-        targetKeys.forEach((key) => {
-            const { element, output } = this.targetElements[key];
-            this.mapper.addTarget(element, output, true,
-                    this.transformNodeManager.isConnectionValid.bind(this.transformNodeManager));
-        });
-
-        this.markConnectedEndpoints();
-
         this.mapper.reposition(this.props.model.getID());
         if ((this.props.model === prevProps.model) && prevState.vertices.length !== 0) {
             return;
         }
-
         this.loadVertices();
     }
 
@@ -514,47 +447,12 @@ class TransformExpanded extends React.Component {
             });
         }
 
+        $('.middle-content, .leftType, .rightType').scroll(() => {
+            this.mapper.reposition(this.props.model.getID());
+        });
+
         this.mapper.reposition(this.props.model.getID());
-
-        this.mapper.onConnectionAborted(() => {
-            clearInterval(this.scrollTimer);
-        });
     }
-
-    componentWillUnmount() {
-        this.scrollTimer && clearInterval(this.scrollTimer);
-    }
-
-    onDragLeave(e) {
-        if (!this.mapper.isConnectionDragging()) {
-            return;
-        }
-        const boundingRect = this.transformOverlayDraggingContentDiv.getBoundingClientRect();
-        const middle = (boundingRect.bottom - boundingRect.top) / 2;
-        let offset = -5;
-        if (e.pageY > middle) {
-            offset = 5;
-        }
-
-        this.scrollTimer = setInterval(() => {
-            this.scroll.scrollTop(this.scroll.getScrollTop() + offset);
-        }, 10);
-    }
-
-    onDragEnter(e) {
-        if (!this.mapper.isConnectionDragging()) {
-            return;
-        }
-
-        clearInterval(this.scrollTimer);
-
-        const targetKeys = Object.keys(this.targetElements);
-        targetKeys.forEach((key) => {
-            const { element, output } = this.targetElements[key];
-            this.mapper.recalculateOffsets(element);
-        });
-    }
-
 
     onTransformDropZoneActivate(e) {
         const dragDropManager = this.context.dragDropManager;
@@ -890,11 +788,6 @@ class TransformExpanded extends React.Component {
         this.loadVertices();
     }
 
-    markConnectedEndpoints() {
-        $('.variable-endpoint').removeClass('fw-circle').addClass('fw-circle-outline');
-        $('.variable-endpoint.jtk-connected').removeClass('fw-circle-outline').addClass('fw-circle');
-    }
-
     render() {
         const vertices = this.state.vertices.filter(vertex => (!vertex.isInner));
         const inputNodes = this.props.model.getInput();
@@ -902,6 +795,7 @@ class TransformExpanded extends React.Component {
         const inputs = [];
         const outputs = [];
         const functions = [];
+        const operators = [];
 
         if (this.state.vertices.length > 0) {
             inputNodes.forEach((inputNode) => {
@@ -941,12 +835,32 @@ class TransformExpanded extends React.Component {
                         funcDetails.assignmentStmt = child;
                     });
                     functions.push(...funcInvs);
+                } else if (ASTFactory.isBinaryExpression(rightExpression)
+                            || ASTFactory.isUnaryExpression(rightExpression)) {
+                    const operatorInfo = {};
+                    operatorInfo.name = rightExpression.getOperator();
+                    operatorInfo.parameters = [];
+                    operatorInfo.returnParams = [];
+                    operatorInfo.parameters[0] = { name: rightExpression.getID() + ':0',
+                        displayName: '',
+                        type: 'var' };
+                    if (ASTFactory.isBinaryExpression(rightExpression)) {
+                        operatorInfo.parameters[1] = { name: rightExpression.getID() + ':1',
+                            displayName: '',
+                            type: 'var' };
+                    }
+                    operatorInfo.returnParams.push({ name: rightExpression.getID() + ':return:0',
+                        displayName: '',
+                        type: 'var' });
+                    operators.push({ operator: operatorInfo, opStmt: rightExpression });
                 }
             });
         }
         return (
             <div
+                id={`transformOverlay-content-${this.props.model.getID()}`}
                 className='transformOverlay'
+                ref={div => this.transformOverlayContentDiv = div}
                 onMouseOver={this.onTransformDropZoneActivate}
                 onMouseOut={this.onTransformDropZoneDeactivate}
             >
@@ -957,103 +871,90 @@ class TransformExpanded extends React.Component {
                         Transform
                     </p>
                 </div>
-                <div className="select-source">
-                    <SuggestionsDropdown
-                        value={this.state.typedSource}
-                        onChange={this.onSourceInputChange}
-                        onEnter={this.onSourceInputEnter}
-                        suggestionsPool={vertices}
-                        placeholder='Select Source'
-                        onSuggestionSelected={this.onSourceSelect}
-                        type='source'
-                    />
+                <div className='left-content'>
+                    <div className="select-source">
+                        <SuggestionsDropdown
+                            value={this.state.typedSource}
+                            onChange={this.onSourceInputChange}
+                            onEnter={this.onSourceInputEnter}
+                            suggestionsPool={vertices}
+                            placeholder='Select Source'
+                            onSuggestionSelected={this.onSourceSelect}
+                            type='source'
+                        />
+                    </div>
+                    <div className="leftType">
+                        <Tree
+                            viewId={this.props.model.getID()}
+                            endpoints={inputs}
+                            type='source'
+                            makeConnectPoint={this.recordSourceElement}
+                            removeTypeCallbackFunc={this.removeSourceType}
+                            updateVariable={this.updateVariable}
+                            onEndpointRemove={this.removeEndpoint}
+                            foldEndpoint={this.foldEndpoint}
+                            foldedEndpoints={this.state.foldedEndpoints}
+                        />
+                    </div>
                 </div>
-                <div className="select-target">
-                    <SuggestionsDropdown
-                        value={this.state.typedTarget}
-                        onChange={this.onTargetInputChange}
-                        onEnter={this.onTargetInputEnter}
-                        suggestionsPool={vertices}
-                        placeholder='Select Target'
-                        onSuggestionSelected={this.onTargetSelect}
-                        type='target'
-                    />
+                <div className="middle-content">
+                    {
+                        functions.map(({ func, assignmentStmt, parentFunc, funcInv }) => (
+                            <FunctionInv
+                                key={funcInv.getID()}
+                                func={func}
+                                enclosingAssignmentStatement={assignmentStmt}
+                                parentFunc={parentFunc}
+                                funcInv={funcInv}
+                                recordSourceElement={this.recordSourceElement}
+                                recordTargetElement={this.recordTargetElement}
+                                viewId={this.props.model.getID()}
+                                onEndpointRemove={this.removeEndpoint}
+                            />
+                        ))
+                    }
+                    {
+                        operators.map(({ operator, opStmt }) => (
+                            <Operator
+                                key={opStmt.getID()}
+                                operator={operator}
+                                opStmt={opStmt}
+                                recordSourceElement={this.recordSourceElement}
+                                recordTargetElement={this.recordTargetElement}
+                                viewId={this.props.model.getID()}
+                                onEndpointRemove={this.removeEndpoint}
+                            />
+                        ))
+                    }
                 </div>
-                <div
-                    id={`transformOverlay-content-dragging-${this.props.model.getID()}`}
-                    ref={(div) => { this.transformOverlayDraggingContentDiv = div; }}
-                    className='transform-dragging-connections'
-                    onMouseLeave={this.onDragLeave}
-                    onMouseEnter={this.onDragEnter}
-                >
-                    <div className="middle-content-frame" />
-                    <Scrollbars
-                        ref={ scroll => {this.scroll = scroll;} }
-                        onScroll={this.onConnectionsScroll}
-                    >
-                        <div
-                            id={`transformOverlay-content-${this.props.model.getID()}`}
-                            ref={(div) => { this.transformOverlayContentDiv = div; }}
-                            className='transform-connections'
-                        >
-                            <div className='left-content'>
-                                <div className="leftType">
-                                    <Tree
-                                        viewId={this.props.model.getID()}
-                                        endpoints={inputs}
-                                        type='source'
-                                        makeConnectPoint={this.recordSourceElement}
-                                        removeTypeCallbackFunc={this.removeSourceType}
-                                        updateVariable={this.updateVariable}
-                                        onEndpointRemove={this.removeEndpoint}
-                                        onConnectPointMouseEnter={this.onConnectPointMouseEnter}
-                                        foldEndpoint={this.foldEndpoint}
-                                        foldedEndpoints={this.state.foldedEndpoints}
-                                    />
-                                </div>
-                            </div>
-                            <div className="middle-content">
-                                {
-                                    functions.map(({ func, assignmentStmt, parentFunc, funcInv }) => (
-                                        <FunctionInv
-                                            key={funcInv.getID()}
-                                            func={func}
-                                            enclosingAssignmentStatement={assignmentStmt}
-                                            parentFunc={parentFunc}
-                                            funcInv={funcInv}
-                                            recordSourceElement={this.recordSourceElement}
-                                            recordTargetElement={this.recordTargetElement}
-                                            viewId={this.props.model.getID()}
-                                            onEndpointRemove={this.removeEndpoint}
-                                            onConnectPointMouseEnter={this.onConnectPointMouseEnter}
-                                            foldEndpoint={this.foldEndpoint}
-                                            foldedEndpoints={this.state.foldedEndpoints}
-                                            isCollapsed={this.state.foldedFunctions[funcInv.getID()]}
-                                            onHeaderClick={this.foldFunction}
-                                        />
-                                    ))
-                                }
-                            </div>
-                            <div className='right-content'>
-                                <div className='rightType'>
-                                    <Tree
-                                        viewId={this.props.model.getID()}
-                                        endpoints={outputs}
-                                        type='target'
-                                        makeConnectPoint={this.recordTargetElement}
-                                        removeTypeCallbackFunc={this.removeTargetType}
-                                        updateVariable={this.updateVariable}
-                                        onConnectPointMouseEnter={this.onConnectPointMouseEnter}
-                                        foldEndpoint={this.foldEndpoint}
-                                        foldedEndpoints={this.state.foldedEndpoints}
-                                        onEndpointRemove={this.removeEndpoint}
-                                    />
-                                </div>
-                            </div>
-                            <div id='transformContextMenu' className='transformContextMenu' />
-                        </div>
-                    </Scrollbars>
+                <div className='right-content'>
+                    <div className="select-target">
+                        <SuggestionsDropdown
+                            value={this.state.typedTarget}
+                            onChange={this.onTargetInputChange}
+                            onEnter={this.onTargetInputEnter}
+                            suggestionsPool={vertices}
+                            placeholder='Select Target'
+                            onSuggestionSelected={this.onTargetSelect}
+                            type='target'
+                        />
+                    </div>
+                    <div className='rightType'>
+                        <Tree
+                            viewId={this.props.model.getID()}
+                            endpoints={outputs}
+                            type='target'
+                            makeConnectPoint={this.recordTargetElement}
+                            removeTypeCallbackFunc={this.removeTargetType}
+                            updateVariable={this.updateVariable}
+                            foldEndpoint={this.foldEndpoint}
+                            foldedEndpoints={this.state.foldedEndpoints}
+                            onEndpointRemove={this.removeEndpoint}
+                        />
+                    </div>
                 </div>
+                <div id='transformContextMenu' className='transformContextMenu' />
+                <div id='transformFooter' className='transform-footer' />
             </div>
         );
     }
