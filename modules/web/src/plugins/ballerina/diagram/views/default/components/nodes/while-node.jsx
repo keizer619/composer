@@ -1,3 +1,4 @@
+
 /**
  * Copyright (c) 2017, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
@@ -20,7 +21,8 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import WhileNodeModel from 'plugins/ballerina/model/tree/while-node';
 import DropZone from 'plugins/ballerina/drag-drop/DropZone';
-import CompoundStatementDecorator from './compound-statement-decorator';
+import AddZone from 'plugins/ballerina/drag-drop/add-zone';
+import FlowChartWhileStatementDecorator from './flowchart-while-statement-decorator';
 import './try-node.css';
 
 class WhileNode extends React.Component {
@@ -50,7 +52,16 @@ class WhileNode extends React.Component {
                     enableDragBg
                     enableCenterOverlayLine
                 />
-                <CompoundStatementDecorator
+                <AddZone
+                    model={this.props.model}
+                    x={dropZone.x}
+                    y={dropZone.y}
+                    width={dropZone.w}
+                    height={dropZone.h}
+                    renderUponDragStart
+                    enableDragBg
+                />
+                <FlowChartWhileStatementDecorator
                     dropTarget={model}
                     bBox={bBox}
                     title={'while'}
